@@ -1,0 +1,9 @@
+{
+  "name": "historybypeople",
+  "private": true,
+  "workspaces": ["frontend", "backend"],
+  "scripts": {
+    "install-all": "npm --prefix frontend install && npm --prefix backend install",
+    "dev": "bash scripts/start-all.sh"
+  }
+}
