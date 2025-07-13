@@ -126,10 +126,10 @@ router.post('/', async (req, res) => {
     });
 
     const stream = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1-2025-04-14',
       messages: contextMessages,
       stream: true,
-      temperature: 0.6,        // Slightly lower for faster, more focused responses
+      temperature: 0.8,        // Slightly lower for faster, more focused responses
       max_tokens: 800,         // Reduced for more concise persona generation
       top_p: 0.9,             // Add nucleus sampling for better quality/speed balance
       frequency_penalty: 0.1,  // Slight penalty to avoid repetition

@@ -202,28 +202,44 @@ export default function useChat(onConversationsChange) {
         
         console.log('✅ Scene markers found in response');
         
-        // Enhanced persona name extraction
+        // IMPROVED PERSONA NAME LOGIC: Handle scene-specific requests vs persona selection
         let personaName = 'Character';
         
-        // Strategy 1: Extract from scene visual prompts (NEW PRIMARY METHOD)
-        const allScenes = parseSceneDetails(responseText);
-        if (allScenes.length > 0) {
-          // Look for persona name in the first scene's visual prompt
-          const firstScenePrompt = allScenes[0].visualPrompt;
-          // Extract name from pattern: "Visual Prompt: [Persona name], [age/appearance]..."
-          const nameMatch = firstScenePrompt.match(/Visual Prompt:\s*([^,]+),/);
-          if (nameMatch && nameMatch[1]) {
-            personaName = nameMatch[1].trim();
+        // Check if user is requesting a specific scene (preserve previous persona name)
+        const isSceneRequest = userMessage && (
+          /(?:only\s+)?(?:want|generate|create|show|make)\s+(?:me\s+)?(?:only\s+)?scene\s*\d+/i.test(userMessage) ||
+          /scene\s*\d+/i.test(userMessage)
+        );
+        
+        if (isSceneRequest) {
+          // User is requesting specific scenes, preserve the existing persona name
+          if (chatState.scenes?.personaName) {
+            personaName = chatState.scenes.personaName;
+            console.log('🎭 Preserving existing persona name for scene request:', personaName);
+          } else {
+            // Fallback: look for the most recent non-scene-request user message
+            const nonSceneUserMessage = [...messages].reverse().find(msg => 
+              msg.sender === 'user' && 
+              !(/(?:only\s+)?(?:want|generate|create|show|make)\s+(?:me\s+)?(?:only\s+)?scene\s*\d+/i.test(msg.text) ||
+                /scene\s*\d+/i.test(msg.text))
+            );
+            if (nonSceneUserMessage) {
+              personaName = nonSceneUserMessage.text.trim();
+              console.log('🎭 Found previous persona name:', personaName);
+            }
           }
+        } else if (userMessage && userMessage.trim()) {
+          // User provided a new persona name
+          personaName = userMessage.trim();
+          console.log('🎭 Using new persona name from user input:', personaName);
+        } else {
+          // Fallback to counting system
+          const existingPersonas = allGeneratedPersonas.length;
+          personaName = `Character ${existingPersonas + 1}`;
+          console.log('🎭 Using fallback persona name:', personaName);
         }
         
-        // Strategy 2: Extract from conversation context (FALLBACK)
-        if (personaName === 'Character') {
-          personaName = extractPersonaFromContext(messages) || 'Character';
-        }
-        
-        console.log('🎭 Extracted persona name:', personaName);
-        
+        const allScenes = parseSceneDetails(responseText);
         console.log('📝 All parsed scenes:', allScenes);
         
         // Filter to specific scene if requested
@@ -266,7 +282,7 @@ export default function useChat(onConversationsChange) {
       }));
       return false;
     }
-  }, [messages, parseSceneDetails, extractPersonaFromContext]);
+  }, [messages, parseSceneDetails]);
 
   // Button-triggered visual generation with progressive scene display
   const generateVisuals = useCallback(async () => {
@@ -500,7 +516,7 @@ export default function useChat(onConversationsChange) {
           ));
           
           // Parse scenes from the completed response (but don't auto-generate)
-          const hasScenes = await parseScenes(finalText);
+          const hasScenes = await parseScenes(finalText, message);
           
           // Update conversation phase based on content
           if (hasScenes) {
