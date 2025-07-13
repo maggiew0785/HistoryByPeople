@@ -1,10 +1,9 @@
 import React from 'react';
-import useChat from '../hooks/useChat';
 import ChatContainer from './chat/ChatContainer';
 import ChatInput from './chat/ChatInput';
 
-export default function ChatPanel() {
-  const { messages, isLoading, error, sendMessage, clearChat } = useChat();
+export default function ChatPanel({ chatState }) {
+  const { messages, isLoading, error, sendMessage, clearChat } = chatState;
 
   return (
     <div className="h-full bg-white flex flex-col overflow-hidden">
@@ -23,7 +22,7 @@ export default function ChatPanel() {
       
       {/* Scrollable Chat Area - This will expand to fill available space */}
       <div className="flex-1 min-h-0">
-        <ChatContainer messages={messages} error={error} />
+        <ChatContainer messages={messages} error={error} chatState={chatState} />
       </div>
       
       {/* Fixed Input at Bottom */}
