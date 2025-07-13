@@ -35,32 +35,61 @@ async function generateScene(scene, personaName) {
   console.log(`🎬 Generating Scene ${scene.sceneNumber}: ${scene.title}`);
   
   try {
+    // Validate and sanitize the visual prompt
+    let promptText = scene.visualPrompt || `${scene.title} - historical scene`;
+    
+    // Ensure prompt is under 1000 characters (Runway limit)
+    if (promptText.length > 990) {
+      console.log(`⚠️ Prompt too long (${promptText.length} chars), truncating...`);
+      promptText = promptText.substring(0, 897) + '...';
+    }
+    
+    console.log(`📝 Using prompt (${promptText.length} chars): ${promptText}`);
+    
     // Step 1: Generate image
     console.log(`📸 Generating image for Scene ${scene.sceneNumber}...`);
     const imageTask = await runwayClient.textToImage
       .create({
         model: 'gen4_image',
         ratio: '1280:720',
-        promptText: scene.visualPrompt,
+        promptText: promptText,
       })
       .waitForTaskOutput();
 
     console.log(`✅ Image generated for Scene ${scene.sceneNumber}`);
     const imageUrl = imageTask.output[0];
     
+    // 🔍 LOG IMAGE URL
+    console.log(`🖼️  Image URL: ${imageUrl}`);
+    
     // Step 2: Generate video from image
     console.log(`🎥 Generating video for Scene ${scene.sceneNumber}...`);
-    const videoTask = await runwayClient.imageToVideo
-      .create({
-        model: 'gen4_turbo',
-        promptImage: imageUrl,
-        promptText: `Cinematic view: ${scene.context}`,
-        ratio: '1280:720',
-        duration: 5,
-      })
-      .waitForTaskOutput();
+    let videoUrl = null;
+    let videoError = null;
+    
+    try {
+      const videoTask = await runwayClient.imageToVideo
+        .create({
+          model: 'gen4_turbo',
+          promptImage: imageUrl,
+          promptText: `Cinematic view: ${scene.context}`,
+          ratio: '1280:720',
+          duration: 5,
+        })
+        .waitForTaskOutput();
 
-    console.log(`✅ Video generated for Scene ${scene.sceneNumber}`);
+      console.log(`✅ Video generated for Scene ${scene.sceneNumber}`);
+      videoUrl = videoTask.output[0];
+      
+      // 🔍 LOG VIDEO URL
+      console.log(`🎞️  Video URL: ${videoUrl}`);
+      
+    } catch (videoGenerationError) {
+      console.log(`⚠️ Video generation failed for Scene ${scene.sceneNumber}, using image URL as fallback`);
+      console.log(`📸 Video error:`, videoGenerationError.message);
+      videoError = videoGenerationError.message;
+      videoUrl = imageUrl; // Use image URL as fallback
+    }
     
     return {
       sceneNumber: scene.sceneNumber,
@@ -68,8 +97,11 @@ async function generateScene(scene, personaName) {
       visualPrompt: scene.visualPrompt,
       context: scene.context,
       imageUrl: imageUrl,
-      videoUrl: videoTask.output[0],
-      status: 'complete'
+      videoUrl: videoUrl,
+      status: 'complete',
+      videoFallback: videoUrl === imageUrl, // Flag to indicate if video is actually an image
+      videoError: videoError,
+      createdAt: new Date().toISOString()
     };
 
   } catch (error) {
@@ -101,15 +133,28 @@ async function generateScene(scene, personaName) {
 
         const retryImageUrl = retryImageTask.output[0];
         
-        const retryVideoTask = await runwayClient.imageToVideo
-          .create({
-            model: 'gen4_turbo',
-            promptImage: retryImageUrl,
-            promptText: scene.context.substring(0, 100), // Shorten context
-            ratio: '1280:720',
-            duration: 5,
-          })
-          .waitForTaskOutput();
+        // Try video generation, but fallback to image if it fails
+        let retryVideoUrl = retryImageUrl;
+        let retryVideoError = null;
+        
+        try {
+          const retryVideoTask = await runwayClient.imageToVideo
+            .create({
+              model: 'gen4_turbo',
+              promptImage: retryImageUrl,
+              promptText: scene.context.substring(0, 100), // Shorten context
+              ratio: '1280:720',
+              duration: 5,
+            })
+            .waitForTaskOutput();
+          
+          retryVideoUrl = retryVideoTask.output[0];
+          console.log(`✅ Scene ${scene.sceneNumber} video succeeded on retry`);
+        } catch (retryVideoError) {
+          console.log(`⚠️ Scene ${scene.sceneNumber} video failed on retry, using image as fallback`);
+          retryVideoError = retryVideoError.message;
+          // retryVideoUrl already set to retryImageUrl above
+        }
 
         console.log(`✅ Scene ${scene.sceneNumber} succeeded on retry`);
         
@@ -119,8 +164,10 @@ async function generateScene(scene, personaName) {
           visualPrompt: simplifiedPrompt,
           context: scene.context,
           imageUrl: retryImageUrl,
-          videoUrl: retryVideoTask.output[0],
+          videoUrl: retryVideoUrl,
           status: 'complete',
+          videoFallback: retryVideoUrl === retryImageUrl,
+          videoError: retryVideoError,
           retried: true
         };
         

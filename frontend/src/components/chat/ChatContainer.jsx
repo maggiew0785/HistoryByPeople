@@ -37,14 +37,24 @@ export default function ChatContainer({ messages, error, chatState, onGenerateVi
           </div>
         )}
         
-        {messages.map((message) => (
-          <ChatMessage 
-            key={message.id} 
-            message={message} 
-            chatState={chatState} 
-            onGenerateVideos={onGenerateVideos}
-          />
-        ))}
+        {messages.map((message, index) => {
+          // Find the last AI message index
+          const lastAiMessageIndex = messages.map((msg, idx) => msg.sender === 'ai' ? idx : -1)
+            .filter(idx => idx !== -1)
+            .pop();
+          
+          const isLastAiMessage = message.sender === 'ai' && index === lastAiMessageIndex;
+          
+          return (
+            <ChatMessage 
+              key={message.id} 
+              message={message} 
+              chatState={chatState} 
+              onGenerateVideos={onGenerateVideos}
+              isLastAiMessage={isLastAiMessage}
+            />
+          );
+        })}
       </div>
     </div>
   );

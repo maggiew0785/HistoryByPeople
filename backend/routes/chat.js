@@ -72,6 +72,8 @@ Include period-specific details:
 Visual Prompt: [Persona name], [age/appearance], wearing [specific period clothing with details], [hairstyle], in [detailed setting with architecture], [time period], [weather/lighting], [emotional expression and body language], [specific historical objects/technology visible], [camera angle: close-up/medium/wide shot], photorealistic historical photography style, [specific color palette: sepia/muted/dramatic]
 Context: [Why this moment matters to their story]"
 
+**CRITICAL: Visual Prompt must be under 800 characters to ensure compatibility with image generation API limits. Be concise but descriptive.**
+
 **Period-Specific Examples:**
 - 1860s American: "wearing wool frock coat, high collar, pocket watch chain, mutton chop sideburns, in clapboard house with oil lamps"
 - Medieval: "wearing linen chemise under wool kirtle, braided hair with veil, in stone cottage with thatched roof, by candlelight"

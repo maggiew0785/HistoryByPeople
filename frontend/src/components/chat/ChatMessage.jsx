@@ -2,7 +2,7 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 
 // Enhanced Generate Videos Button Component
-function GenerateVideosButton({ message, chatState, onGenerateVideos }) {
+function GenerateVideosButton({ message, chatState, onGenerateVideos, isLastAiMessage }) {
   // Handle both new and legacy chatState structure
   const state = chatState.chatState || chatState;
   const { 
@@ -14,62 +14,47 @@ function GenerateVideosButton({ message, chatState, onGenerateVideos }) {
     completedScenes = []
   } = state;
 
-  // Check if this message contains scenes and should show the button
-  const messageHasScenes = message.text.includes('**Scene 1:') || 
-                          message.text.includes('Scene 1:') ||
+  // Check if this message contains scenes OR if we have scenes in global state
+  const messageHasScenes = message.text.includes('**Scene') || 
+                          message.text.includes('Scene ') ||
                           message.text.includes('GENERATE_VISUALS:');
   
   const sceneCount = scenes?.scenes?.length || 0;
   const hasValidScenes = sceneCount > 0;
   const personaName = scenes?.personaName || 'Unknown Character';
   
-  // Debug logging
-  console.log('🔍 GenerateVideosButton Debug:', {
-    messageHasScenes,
-    sceneCount,
-    hasValidScenes,
-    isGenerating,
-    generatedVideos: !!generatedVideos,
-    onGenerateVideos: typeof onGenerateVideos,
-    personaName
-  });
-
-  const shouldShowButton = messageHasScenes && hasValidScenes && !generatedVideos;
+  // NEW LOGIC: Show button only on the last AI message when we have valid scenes
+  // This ensures the button appears in the right place and doesn't duplicate
+  const shouldShowButton = hasValidScenes && !generatedVideos && !isGenerating && isLastAiMessage;
+  
+  // Debug logging (simplified)
+  if (hasValidScenes && isLastAiMessage) {
+    console.log('🎬 Generate button available:', {
+      sceneCount,
+      personaName,
+      shouldShowButton
+    });
+  }
 
   const handleButtonClick = () => {
-    console.log('🎬 Button clicked! Calling onGenerateVideos');
+    console.log('🎬 Generating visual story for:', personaName);
     if (onGenerateVideos && typeof onGenerateVideos === 'function') {
       onGenerateVideos();
     } else {
-      console.error('❌ onGenerateVideos is not available:', onGenerateVideos);
+      console.error('❌ onGenerateVideos function not available');
     }
   };
 
-  if (!messageHasScenes) {
+  // Don't show anything if no scenes are available
+  if (!hasValidScenes) {
     return null;
   }
 
   return (
     <div className="mt-4">
-      {/* Debug Info */}
-      <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-        <div className="flex items-center text-yellow-700 mb-2">
-          <span className="text-lg mr-2">⚠️</span>
-          <span className="font-medium">DEBUG: Scenes Detected!</span>
-        </div>
-        <div className="text-sm text-yellow-600">
-          <p>Message contains scene markers: {messageHasScenes ? 'Yes' : 'No'}</p>
-          <p>Scenes in state: <strong>{sceneCount} scenes</strong></p>
-          <p>Persona: <strong>{personaName}</strong></p>
-          <p>Generated videos: {generatedVideos ? 'Yes' : 'No'}</p>
-          <p>Is generating: {isGenerating ? 'Yes' : 'No'}</p>
-          <p>Should show button: {shouldShowButton ? 'Yes' : 'No'}</p>
-          <p>onGenerateVideos function: {typeof onGenerateVideos}</p>
-        </div>
-      </div>
 
-      {/* Generation in Progress */}
-      {isGenerating && (
+      {/* Generation in Progress - Only show on the last AI message */}
+      {isGenerating && isLastAiMessage && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex items-center mb-2">
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
@@ -112,8 +97,8 @@ function GenerateVideosButton({ message, chatState, onGenerateVideos }) {
         </div>
       )}
 
-      {/* Error State */}
-      {error && !isGenerating && (
+      {/* Error State - Only show on the last AI message */}
+      {error && !isGenerating && isLastAiMessage && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
           <div className="flex items-center text-red-700 mb-2">
             <span className="text-lg mr-2">❌</span>
@@ -146,123 +131,9 @@ function GenerateVideosButton({ message, chatState, onGenerateVideos }) {
       )}
     </div>
   );
-
-  // Show success state if videos already generated for this persona
-  if (generatedVideos && generatedVideos.personaName === scenes.personaName) {
-    return (
-      <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-        <div className="flex items-center text-green-700 mb-2">
-          <span className="text-xl mr-2">✅</span>
-          <span className="font-medium">Videos Generated Successfully!</span>
-        </div>
-        <div className="text-sm text-green-600">
-          <p>Generated {generatedVideos.totalScenes} scenes for <strong>{generatedVideos.personaName}</strong></p>
-          <p className="mt-1">Check the Visual Stories panel to view your videos →</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show error state with retry option
-  if (error && !isGenerating) {
-    return (
-      <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-        <div className="flex items-center text-red-700 mb-2">
-          <span className="text-xl mr-2">❌</span>
-          <span className="font-medium">Generation Failed</span>
-        </div>
-        <div className="text-sm text-red-600 mb-3">
-          {error}
-        </div>
-        <button
-          onClick={generateVisuals}
-          className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
-        >
-          <span>🔄</span>
-          Retry Generation
-        </button>
-      </div>
-    );
-  }
-
-  // Show generation in progress
-  if (isGenerating) {
-    return (
-      <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-        <div className="flex items-center text-blue-700 mb-3">
-          <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-3"></div>
-          <span className="font-medium">Generating Videos...</span>
-        </div>
-        
-        {progress && (
-          <div className="space-y-2">
-            <div className="text-sm text-blue-600">
-              {progress.message || 'Processing scenes...'}
-            </div>
-            
-            {/* Progress bar */}
-            {progress.currentScene && progress.totalScenes && (
-              <div className="w-full bg-blue-200 rounded-full h-2">
-                <div 
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                  style={{ 
-                    width: `${(progress.currentScene / progress.totalScenes) * 100}%` 
-                  }}
-                ></div>
-              </div>
-            )}
-            
-            {/* Scene completion status */}
-            {completedScenes.length > 0 && (
-              <div className="text-xs text-blue-600">
-                <div className="font-medium mb-1">
-                  Completed: {completedScenes.length} / {scenes.scenes.length} scenes
-                </div>
-                <div className="space-y-1">
-                  {completedScenes.map(scene => (
-                    <div key={scene.sceneNumber} className="flex items-center text-green-600">
-                      <span className="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
-                      Scene {scene.sceneNumber}: {scene.title}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Show the main generate button
-  return (
-    <div className="mt-4">
-      <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-        <div className="flex items-center text-gray-700 mb-2">
-          <span className="text-lg mr-2">🎬</span>
-          <span className="font-medium">Ready to Generate Visual Story</span>
-        </div>
-        <div className="text-sm text-gray-600">
-          <p>Detected <strong>{scenes.scenes.length} scenes</strong> for <strong>{scenes.personaName}</strong></p>
-          <p className="mt-1">Click below to create videos for each scene using AI</p>
-        </div>
-      </div>
-      
-      <button
-        onClick={generateVisuals}
-        className="flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 font-medium"
-      >
-        <span className="text-xl">🎥</span>
-        <div className="text-left">
-          <div>Generate Videos</div>
-          <div className="text-xs opacity-90">{scenes.scenes.length} scenes • ~{scenes.scenes.length * 30} seconds</div>
-        </div>
-      </button>
-    </div>
-  );
 }
 
-export default function ChatMessage({ message, chatState, onGenerateVideos }) {
+export default function ChatMessage({ message, chatState, onGenerateVideos, isLastAiMessage }) {
   const isUser = message.sender === 'user';
   
   return (
@@ -304,6 +175,7 @@ export default function ChatMessage({ message, chatState, onGenerateVideos }) {
             message={message} 
             chatState={chatState} 
             onGenerateVideos={onGenerateVideos}
+            isLastAiMessage={isLastAiMessage}
           />
         )}
         
@@ -312,10 +184,15 @@ export default function ChatMessage({ message, chatState, onGenerateVideos }) {
             isUser ? 'text-blue-100' : 'text-gray-500'
           }`}
         >
-          {message.timestamp.toLocaleTimeString([], { 
-            hour: '2-digit', 
-            minute: '2-digit' 
-          })}
+          {(() => {
+            const timestamp = typeof message.timestamp === 'string' 
+              ? new Date(message.timestamp) 
+              : message.timestamp;
+            return timestamp.toLocaleTimeString([], { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            });
+          })()}
         </div>
       </div>
     </div>
