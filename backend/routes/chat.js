@@ -78,10 +78,6 @@ Context: [Why this moment matters to their story]"
 - 1860s American: "wearing wool frock coat, high collar, pocket watch chain, mutton chop sideburns, in clapboard house with oil lamps"
 - Medieval: "wearing linen chemise under wool kirtle, braided hair with veil, in stone cottage with thatched roof, by candlelight"
 - 1920s: "wearing drop-waist silk dress, T-bar shoes, bob haircut, in Art Deco parlor with electric lighting"
-
-After presenting all scenes, ask: "Should I generate these scenes to bring [Persona]'s story to life?"
-
-If user confirms, respond with: "GENERATE_VISUALS: [persona_name]"
 `;
 
 // Helper function to manage conversation context

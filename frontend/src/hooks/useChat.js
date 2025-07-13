@@ -123,82 +123,6 @@ export default function useChat(onConversationsChange) {
     return null;
   }, []);
 
-  // Enhanced scene detection (no auto-generation)
-  const parseScenes = useCallback(async (responseText, userMessage = '') => {
-    try {
-      console.log('🔍 Parsing scenes from response...', responseText.substring(0, 200));
-      
-      // Check if user requested specific scenes
-      const sceneRequestMatch = userMessage.match(/(?:show|generate|create|make)\s+(?:me\s+)?(?:only\s+)?scene\s*(\d+)/i);
-      const specificSceneNumber = sceneRequestMatch ? parseInt(sceneRequestMatch[1]) : null;
-      
-      // Look for scene markers in the response
-      if (responseText.includes('**Scene ') || 
-          responseText.includes('Scene ') || 
-          responseText.includes('GENERATE_VISUALS:')) {
-        
-        console.log('✅ Scene markers found in response');
-        
-        // Enhanced persona name extraction
-        let personaName = 'Character';
-        
-        // Strategy 1: Look for GENERATE_VISUALS trigger first
-        const generateMatch = responseText.match(/GENERATE_VISUALS:\s*([^\n\r]+)/i);
-        if (generateMatch && generateMatch[1]) {
-          personaName = generateMatch[1].trim();
-        } else {
-          // Strategy 2: Extract from conversation context
-          personaName = extractPersonaFromContext(messages) || 'Character';
-        }
-        
-        console.log('🎭 Extracted persona name:', personaName);
-        
-        // Parse all scenes from response
-        const allScenes = parseSceneDetails(responseText);
-        console.log('📝 All parsed scenes:', allScenes);
-        
-        // Filter to specific scene if requested
-        let scenesToUse = allScenes;
-        if (specificSceneNumber && allScenes.length > 0) {
-          const requestedScene = allScenes.find(scene => scene.sceneNumber === specificSceneNumber);
-          if (requestedScene) {
-            scenesToUse = [requestedScene];
-            console.log(`✅ Using only requested Scene ${specificSceneNumber}`);
-          }
-        }
-        
-        if (scenesToUse.length > 0) {
-          console.log('✅ Scenes parsed successfully:', scenesToUse.length, 'scenes');
-          setChatState(prev => ({
-            ...prev,
-            scenes: {
-              scenes: scenesToUse,
-              personaName: personaName,
-              responseText: responseText
-            },
-            generatedVideos: null, // Clear previous results
-            error: null,
-            progress: null,
-            completedScenes: []
-          }));
-          return true;
-        } else {
-          console.log('❌ No valid scenes found after filtering');
-        }
-      } else {
-        console.log('❌ No scene markers found in response');
-      }
-      return false;
-    } catch (error) {
-      console.error('Scene parsing error:', error);
-      setChatState(prev => ({
-        ...prev,
-        error: error.message
-      }));
-      return false;
-    }
-  }, [messages]);
-
   // Helper function to parse scene details from text
   const parseSceneDetails = useCallback((responseText) => {
     const scenes = [];
@@ -250,18 +174,99 @@ export default function useChat(onConversationsChange) {
     // Look for previous persona mentions in the conversation
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
-      if (msg.sender === 'ai' && msg.text.includes('GENERATE_VISUALS:')) {
-        const match = msg.text.match(/GENERATE_VISUALS:\s*(.+?)(?:\n|$)/);
-        if (match) return match[1].trim();
-      }
       
       // Look for character names in user messages
-      const characterMatch = msg.text.match(/(?:show|tell|about)\s+(.+?)(?:'s|story|scene)/i);
+      const characterMatch = msg.text.match(/(?:show|tell|about|visualize)\s+(.+?)(?:'s|story|scene)/i);
       if (characterMatch) return characterMatch[1].trim();
+      
+      // Look for persona selection from Phase 2
+      const selectionMatch = msg.text.match(/(?:explore|choose|select)\s+(.+?)(?:'s|\s|$)/i);
+      if (selectionMatch) return selectionMatch[1].trim();
     }
     
     return null;
   }, []);
+
+  // Enhanced scene detection (no auto-generation)
+  const parseScenes = useCallback(async (responseText, userMessage = '') => {
+    try {
+      console.log('🔍 Parsing scenes from response...', responseText.substring(0, 200));
+      
+      // Check if user requested specific scenes
+      const sceneRequestMatch = userMessage.match(/(?:show|generate|create|make)\s+(?:me\s+)?(?:only\s+)?scene\s*(\d+)/i);
+      const specificSceneNumber = sceneRequestMatch ? parseInt(sceneRequestMatch[1]) : null;
+      
+      // Look for scene markers in the response
+      if (responseText.includes('**Scene ') || 
+          responseText.includes('Scene ')) {
+        
+        console.log('✅ Scene markers found in response');
+        
+        // Enhanced persona name extraction
+        let personaName = 'Character';
+        
+        // Strategy 1: Extract from scene visual prompts (NEW PRIMARY METHOD)
+        const allScenes = parseSceneDetails(responseText);
+        if (allScenes.length > 0) {
+          // Look for persona name in the first scene's visual prompt
+          const firstScenePrompt = allScenes[0].visualPrompt;
+          // Extract name from pattern: "Visual Prompt: [Persona name], [age/appearance]..."
+          const nameMatch = firstScenePrompt.match(/Visual Prompt:\s*([^,]+),/);
+          if (nameMatch && nameMatch[1]) {
+            personaName = nameMatch[1].trim();
+          }
+        }
+        
+        // Strategy 2: Extract from conversation context (FALLBACK)
+        if (personaName === 'Character') {
+          personaName = extractPersonaFromContext(messages) || 'Character';
+        }
+        
+        console.log('🎭 Extracted persona name:', personaName);
+        
+        console.log('📝 All parsed scenes:', allScenes);
+        
+        // Filter to specific scene if requested
+        let scenesToUse = allScenes;
+        if (specificSceneNumber && allScenes.length > 0) {
+          const requestedScene = allScenes.find(scene => scene.sceneNumber === specificSceneNumber);
+          if (requestedScene) {
+            scenesToUse = [requestedScene];
+            console.log(`✅ Using only requested Scene ${specificSceneNumber}`);
+          }
+        }
+        
+        if (scenesToUse.length > 0) {
+          console.log('✅ Scenes parsed successfully:', scenesToUse.length, 'scenes');
+          setChatState(prev => ({
+            ...prev,
+            scenes: {
+              scenes: scenesToUse,
+              personaName: personaName,
+              responseText: responseText
+            },
+            generatedVideos: null, // Clear previous results
+            error: null,
+            progress: null,
+            completedScenes: []
+          }));
+          return true;
+        } else {
+          console.log('❌ No valid scenes found after filtering');
+        }
+      } else {
+        console.log('❌ No scene markers found in response');
+      }
+      return false;
+    } catch (error) {
+      console.error('Scene parsing error:', error);
+      setChatState(prev => ({
+        ...prev,
+        error: error.message
+      }));
+      return false;
+    }
+  }, [messages, parseSceneDetails, extractPersonaFromContext]);
 
   // Button-triggered visual generation with progressive scene display
   const generateVisuals = useCallback(async () => {

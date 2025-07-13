@@ -3,8 +3,15 @@ import React, { useState } from 'react';
 // Single Persona Video Display Component
 function PersonaVideoDisplay({ personaData }) {
   const [currentScene, setCurrentScene] = useState(0);
+  const [videoErrors, setVideoErrors] = useState({}); // Track video errors by scene index
   const { personaName, scenes } = personaData;
   const scene = scenes[currentScene];
+
+  const handleVideoError = (sceneIndex) => {
+    setVideoErrors(prev => ({ ...prev, [sceneIndex]: true }));
+  };
+
+  const hasVideoError = videoErrors[currentScene];
 
   return (
     <div className="h-full overflow-y-auto">
@@ -56,8 +63,8 @@ function PersonaVideoDisplay({ personaData }) {
           <div>
             <h3 className="text-lg font-medium mb-3">{scene.title}</h3>
             
-            {/* Video Player */}
-            {scene.videoUrl && (
+            {/* Video Player - only show if videoUrl exists and no error */}
+            {scene.videoUrl && !hasVideoError && (
               <div className="mb-4">
                 <video
                   src={scene.videoUrl}
@@ -66,14 +73,15 @@ function PersonaVideoDisplay({ personaData }) {
                   loop
                   className="w-full rounded-lg shadow-lg"
                   style={{ maxHeight: '400px' }}
+                  onError={() => handleVideoError(currentScene)}
                 >
                   Your browser does not support the video tag.
                 </video>
               </div>
             )}
             
-            {/* Fallback to Image if Video Failed */}
-            {!scene.videoUrl && scene.imageUrl && (
+            {/* Fallback to Image if Video Failed or doesn't exist */}
+            {(!scene.videoUrl || hasVideoError) && scene.imageUrl && (
               <div className="mb-4">
                 <img
                   src={scene.imageUrl}
@@ -82,8 +90,16 @@ function PersonaVideoDisplay({ personaData }) {
                   style={{ maxHeight: '400px', objectFit: 'contain' }}
                 />
                 <p className="text-sm text-yellow-600 mt-2">
-                  ⚠️ Video generation failed, showing image only
+                  ⚠️ {hasVideoError ? 'Video failed to load' : 'Video generation failed'}, showing image only
                 </p>
+              </div>
+            )}
+            
+            {/* No media available */}
+            {(!scene.videoUrl || hasVideoError) && !scene.imageUrl && (
+              <div className="mb-4 p-8 bg-gray-100 rounded-lg text-center">
+                <div className="text-gray-400 text-4xl mb-2">🎬</div>
+                <p className="text-gray-600">No media available for this scene</p>
               </div>
             )}
             
@@ -105,6 +121,9 @@ function PersonaVideoDisplay({ personaData }) {
                 )}
                 {scene.videoUrl && (
                   <p className="mt-1 break-all"><strong>Video URL:</strong> {scene.videoUrl}</p>
+                )}
+                {hasVideoError && (
+                  <p className="mt-1 text-red-600"><strong>Video Error:</strong> Failed to load video</p>
                 )}
               </div>
             </details>
