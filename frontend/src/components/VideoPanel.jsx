@@ -17,6 +17,7 @@ function PersonaVideoDisplay({ personaData }) {
 
   const [currentScene, setCurrentScene] = useState(0);
   const [videoErrors, setVideoErrors] = useState({}); // Track video errors by scene index
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const { personaName, scenes } = personaData;
   
   // Ensure currentScene is within bounds
@@ -28,7 +29,56 @@ function PersonaVideoDisplay({ personaData }) {
     if (videoErrors[safeCurrentScene]) {
       setVideoErrors(prev => ({ ...prev, [safeCurrentScene]: false }));
     }
+    // Stop any ongoing speech when scene changes
+    if (isSpeaking) {
+      speechSynthesis.cancel();
+      setIsSpeaking(false);
+    }
   }, [safeCurrentScene]);
+
+  // Text-to-speech functions
+  const speakText = (text) => {
+    // Check if speech synthesis is supported
+    if (!('speechSynthesis' in window)) {
+      alert('Text-to-speech is not supported in your browser.');
+      return;
+    }
+
+    // Stop any ongoing speech
+    speechSynthesis.cancel();
+
+    // Create new utterance
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Configure speech parameters
+    utterance.rate = 1.5; // Faster reading speed
+    utterance.pitch = 0.8;
+    utterance.volume = 1.2;
+    
+    // Set up event listeners
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      console.error('Speech synthesis error');
+    };
+
+    // Speak the text
+    speechSynthesis.speak(utterance);
+  };
+
+  const stopSpeaking = () => {
+    speechSynthesis.cancel();
+    setIsSpeaking(false);
+  };
+
+  const toggleSpeech = (text) => {
+    if (isSpeaking) {
+      stopSpeaking();
+    } else {
+      speakText(text);
+    }
+  };
 
   const handleVideoError = (sceneIndex) => {
     setVideoErrors(prev => ({ ...prev, [sceneIndex]: true }));
@@ -146,8 +196,36 @@ function PersonaVideoDisplay({ personaData }) {
             {/* Scene Context */}
             {scene.context && (
               <div className="bg-gray-50 p-3 rounded-lg">
-                <h4 className="font-medium text-gray-900 mb-1">Scene Context</h4>
+                <div className="flex items-center justify-between mb-1">
+                  <h4 className="font-medium text-gray-900">Scene Context</h4>
+                  <button
+                    onClick={() => toggleSpeech(scene.context)}
+                    className={`p-1 rounded-full transition-colors ${
+                      isSpeaking 
+                        ? 'bg-red-100 text-red-600 hover:bg-red-200' 
+                        : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                    }`}
+                    title={isSpeaking ? 'Stop reading' : 'Read context aloud'}
+                    aria-label={isSpeaking ? 'Stop reading context' : 'Read context aloud'}
+                  >
+                    {isSpeaking ? (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M9 12h.01M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
                 <p className="text-sm text-gray-700">{scene.context}</p>
+                {isSpeaking && (
+                  <div className="mt-2 flex items-center text-xs text-blue-600">
+                    <div className="animate-pulse w-2 h-2 bg-blue-600 rounded-full mr-1"></div>
+                    Reading aloud...
+                  </div>
+                )}
               </div>
             )}
             
