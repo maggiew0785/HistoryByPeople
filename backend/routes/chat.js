@@ -31,7 +31,7 @@ PHASE 2 - PERSPECTIVE CURATION:
 After clarification, provide:
 1. Comprehensive but concise historical context (A few paragraphs max)
 2. Identify 2-3 specific personas representing key viewpoints:
-   - Clear name/background archetype
+   - Give each persona a specific name and a compelling background archetype
    - Core beliefs and motivations
    - 2-3 formative experiences
    - Emotional stakes in the situation
@@ -131,8 +131,10 @@ router.post('/', async (req, res) => {
       model: 'gpt-4o-mini',
       messages: contextMessages,
       stream: true,
-      temperature: 0.7,
-      max_tokens: 1000,
+      temperature: 0.6,        // Slightly lower for faster, more focused responses
+      max_tokens: 800,         // Reduced for more concise persona generation
+      top_p: 0.9,             // Add nucleus sampling for better quality/speed balance
+      frequency_penalty: 0.1,  // Slight penalty to avoid repetition
     });
 
     let fullResponse = '';

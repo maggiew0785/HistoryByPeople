@@ -39,7 +39,10 @@ export default function App() {
         <div className="flex-1 flex min-h-0">
           <div style={{ width: `${chatWidth}%` }} className="border-r border-gray-200 h-full">
             <ErrorBoundary>
-              <ChatPanel chatState={chatState} />
+              <ChatPanel 
+                chatState={chatState} 
+                onGenerateVideos={chatState.generateVisuals}
+              />
             </ErrorBoundary>
           </div>
           <div 
@@ -52,7 +55,9 @@ export default function App() {
             <ErrorBoundary>
               <VideoPanel 
                 allGeneratedPersonas={chatState.allGeneratedPersonas}
-                currentGeneratedVideos={chatState.generatedVideos}
+                currentGeneratedVideos={chatState.chatState?.generatedVideos || chatState.generatedVideos}
+                isGenerating={chatState.chatState?.isGenerating || chatState.isGeneratingVisuals}
+                progress={chatState.chatState?.progress || chatState.visualProgress}
               />
             </ErrorBoundary>
           </div>

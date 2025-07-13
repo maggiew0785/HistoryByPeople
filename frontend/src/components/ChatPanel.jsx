@@ -2,7 +2,7 @@ import React from 'react';
 import ChatContainer from './chat/ChatContainer';
 import ChatInput from './chat/ChatInput';
 
-export default function ChatPanel({ chatState }) {
+export default function ChatPanel({ chatState, onGenerateVideos }) {
   const { messages, isLoading, error, sendMessage, clearChat } = chatState;
 
   return (
@@ -22,7 +22,12 @@ export default function ChatPanel({ chatState }) {
       
       {/* Scrollable Chat Area - This will expand to fill available space */}
       <div className="flex-1 min-h-0">
-        <ChatContainer messages={messages} error={error} chatState={chatState} />
+        <ChatContainer 
+          messages={messages} 
+          error={error} 
+          chatState={chatState} 
+          onGenerateVideos={onGenerateVideos}
+        />
       </div>
       
       {/* Fixed Input at Bottom */}

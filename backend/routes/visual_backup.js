@@ -75,59 +75,11 @@ async function generateScene(scene, personaName) {
   } catch (error) {
     console.error(`❌ Scene ${scene.sceneNumber} failed:`, error);
     
-    // Check if it's a Runway task error by examining the error properties
-    if (error && error.taskDetails) {
+    // Fixed error handling - check if error has taskDetails property instead of instanceof
+    if (error.taskDetails) {
       console.error('Task Details:', error.taskDetails);
       console.error('Failure Code:', error.taskDetails.failureCode);
       console.error('Failure Reason:', error.taskDetails.failure);
-    }
-    
-    // Add retry logic for certain failures
-    if (error && error.taskDetails && error.taskDetails.failureCode === 'INTERNAL.BAD_OUTPUT.CODE01') {
-      console.log(`🔄 Retrying Scene ${scene.sceneNumber} with simplified prompt...`);
-      
-      try {
-        // Retry with a simplified prompt
-        const simplifiedPrompt = scene.visualPrompt.split(',').slice(0, 3).join(', ');
-        console.log(`📸 Retrying image generation with simplified prompt: ${simplifiedPrompt}`);
-        
-        const retryImageTask = await runwayClient.textToImage
-          .create({
-            model: 'gen4_image',
-            ratio: '1280:720',
-            promptText: simplifiedPrompt,
-          })
-          .waitForTaskOutput();
-
-        const retryImageUrl = retryImageTask.output[0];
-        
-        const retryVideoTask = await runwayClient.imageToVideo
-          .create({
-            model: 'gen4_turbo',
-            promptImage: retryImageUrl,
-            promptText: scene.context.substring(0, 100), // Shorten context
-            ratio: '1280:720',
-            duration: 5,
-          })
-          .waitForTaskOutput();
-
-        console.log(`✅ Scene ${scene.sceneNumber} succeeded on retry`);
-        
-        return {
-          sceneNumber: scene.sceneNumber,
-          title: scene.title,
-          visualPrompt: simplifiedPrompt,
-          context: scene.context,
-          imageUrl: retryImageUrl,
-          videoUrl: retryVideoTask.output[0],
-          status: 'complete',
-          retried: true
-        };
-        
-      } catch (retryError) {
-        console.error(`❌ Scene ${scene.sceneNumber} failed on retry:`, retryError);
-        // Fall through to return error response
-      }
     }
     
     return {
@@ -135,8 +87,8 @@ async function generateScene(scene, personaName) {
       title: scene.title,
       visualPrompt: scene.visualPrompt,
       context: scene.context,
-      error: error.message,
-      errorCode: error.taskDetails?.failureCode || 'UNKNOWN',
+      error: error.message || 'Generation failed',
+      taskDetails: error.taskDetails || null,
       status: 'failed'
     };
   }
@@ -176,37 +128,68 @@ router.post('/generate-sequence', async (req, res) => {
 
     const results = [];
     
-    // Generate scenes sequentially
-    for (let i = 0; i < scenes.length; i++) {
-      const scene = scenes[i];
-      
-      // Send progress update
-      res.write(`data: ${JSON.stringify({ 
-        type: 'progress', 
-        message: `Generating Scene ${scene.sceneNumber}: ${scene.title}`,
-        currentScene: i + 1,
-        totalScenes: scenes.length,
-        sceneStatus: 'generating'
-      })}\n\n`);
+    // Process each scene sequentially to avoid overwhelming the API
+    for (const scene of scenes) {
+      try {
+        // Send progress update
+        res.write(`data: ${JSON.stringify({
+          type: 'progress',
+          message: `Generating Scene ${scene.sceneNumber}: ${scene.title}`,
+          currentScene: scene.sceneNumber,
+          totalScenes: scenes.length,
+          completedScenes: results.length
+        })}\n\n`);
 
-      const result = await generateScene(scene, personaName);
-      results.push(result);
-      
-      // Send scene completion update
-      res.write(`data: ${JSON.stringify({ 
-        type: 'scene_complete', 
-        scene: result,
-        currentScene: i + 1,
-        totalScenes: scenes.length
-      })}\n\n`);
+        const result = await generateScene(scene, personaName);
+        results.push(result);
+
+        // Send completion update for this scene
+        res.write(`data: ${JSON.stringify({
+          type: 'scene_complete',
+          message: `Scene ${scene.sceneNumber} ${result.status === 'complete' ? 'completed' : 'failed'}`,
+          scene: result,
+          completedScenes: results.length,
+          totalScenes: scenes.length
+        })}\n\n`);
+
+        // Add a small delay between scenes to be API-friendly
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+      } catch (error) {
+        console.error(`Visual Generation Error:`, error);
+        
+        const failedResult = {
+          sceneNumber: scene.sceneNumber,
+          title: scene.title,
+          error: error.message,
+          status: 'failed'
+        };
+        
+        results.push(failedResult);
+
+        res.write(`data: ${JSON.stringify({
+          type: 'scene_failed',
+          message: `Scene ${scene.sceneNumber} failed: ${error.message}`,
+          scene: failedResult,
+          completedScenes: results.length,
+          totalScenes: scenes.length
+        })}\n\n`);
+      }
     }
 
-    // Send final completion
-    res.write(`data: ${JSON.stringify({ 
-      type: 'complete', 
-      message: `Generated ${results.length} scenes for ${personaName}`,
+    // Send final completion status
+    const successfulScenes = results.filter(r => r.status === 'complete').length;
+    const failedScenes = results.filter(r => r.status === 'failed').length;
+
+    res.write(`data: ${JSON.stringify({
+      type: 'complete',
+      message: `Generation complete: ${successfulScenes} successful, ${failedScenes} failed`,
       results: results,
-      success: true
+      summary: {
+        total: scenes.length,
+        successful: successfulScenes,
+        failed: failedScenes
+      }
     })}\n\n`);
 
     console.log(`🎉 Visual sequence generation completed for ${personaName}`);

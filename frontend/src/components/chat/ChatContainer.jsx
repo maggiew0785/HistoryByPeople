@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import ChatMessage from './ChatMessage';
 
-export default function ChatContainer({ messages, error, chatState }) {
+export default function ChatContainer({ messages, error, chatState, onGenerateVideos }) {
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -38,7 +38,12 @@ export default function ChatContainer({ messages, error, chatState }) {
         )}
         
         {messages.map((message) => (
-          <ChatMessage key={message.id} message={message} chatState={chatState} />
+          <ChatMessage 
+            key={message.id} 
+            message={message} 
+            chatState={chatState} 
+            onGenerateVideos={onGenerateVideos}
+          />
         ))}
       </div>
     </div>

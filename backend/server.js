@@ -30,6 +30,7 @@ app.get('/health', (req, res) => {
 app.use('/grounding', require('./routes/grounding'));
 app.use('/prompts', require('./routes/prompts'));
 app.use('/api/chat', chatLimiter, require('./routes/chat'));
+app.use('/api/visual', require('./routes/visual'));
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

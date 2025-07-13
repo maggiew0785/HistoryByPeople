@@ -6,23 +6,32 @@ export default function useChat() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // Visual generation state
-  const [scenes, setScenes] = useState(null);
-  const [isGeneratingVisuals, setIsGeneratingVisuals] = useState(false);
-  const [visualProgress, setVisualProgress] = useState(null);
-  const [generatedVideos, setGeneratedVideos] = useState(null);
-  const [allGeneratedPersonas, setAllGeneratedPersonas] = useState([]); // Store all personas
-  const [visualError, setVisualError] = useState(null);
+  // Enhanced visual generation state - button-triggered approach
+  const [chatState, setChatState] = useState({
+    scenes: null,              // Parsed scenes from AI response
+    isGenerating: false,       // Loading state for generation
+    generatedVideos: null,     // Results from generation
+    error: null,              // Error handling
+    progress: null,           // Real-time progress updates
+    completedScenes: []       // Track completed scenes during generation
+  });
+  
+  // Legacy state for backward compatibility
+  const [allGeneratedPersonas, setAllGeneratedPersonas] = useState([]);
 
-  // Parse scenes from AI response
+  // Enhanced scene detection (no auto-generation)
   const parseScenes = useCallback(async (responseText) => {
     try {
+      console.log('🔍 Parsing scenes from response...', responseText.substring(0, 200));
+      
       // Look for scene markers in the response
-      // Check for scenes or visual generation trigger
       if (responseText.includes('**Scene 1:') || 
           responseText.includes('Scene 1:') || 
           responseText.includes('GENERATE_VISUALS:')) {
-        // Enhanced persona name extraction with multiple strategies
+        
+        console.log('✅ Scene markers found in response');
+        
+        // Enhanced persona name extraction
         let personaName = 'Character';
         
         // Strategy 1: Look for GENERATE_VISUALS trigger first
@@ -32,18 +41,19 @@ export default function useChat() {
         } else {
           // Strategy 2: Look for common patterns in historical responses
           const patterns = [
-            /bring ([^'s\n]+)'s story to life/i,
+            /bring ([^'s\n]+)'s story to life/i,  // "bring Claudia's story to life"
             /explore ([^'s\n]+)'s/i,
-            /([A-Z][a-z]+ [A-Z][a-z]+)'s story/,  // First Last Name's story
-            /([A-Z][a-z]+ [A-Z][a-z]+)'s/,  // First Last Name's
+            /([A-Z][a-z]+ [A-Z][a-z]+)'s story/,
+            /([A-Z][a-z]+ [A-Z][a-z]+)'s/,
             /journey of ([^,\n]+),/i,
             /story of ([^,\n]+),/i,
-            /([A-Z][a-z]+)'s/,  // Single name's
-            /I am ([A-Z][a-z]+ [A-Z][a-z]+)/,  // I am First Last
-            /I am ([A-Z][a-z]+)/,  // I am Name
+            /([A-Z][a-z]+)'s/,
+            /I am ([A-Z][a-z]+ [A-Z][a-z]+)/,
+            /I am ([A-Z][a-z]+)/,
             /My name is ([^,\n]+)/i,
             /call me ([^,\n]+)/i,
-            /Visual Prompt:\s*([^,\n]+),/i  // From scene format
+            /Visual Prompt:\s*([^,\n]+),/i,
+            /\*\*([A-Z][a-z]+),\s*[^*]*\*\*/i  // "**Claudia, a Christian Martyr**"
           ];
           
           for (const pattern of patterns) {
@@ -57,12 +67,11 @@ export default function useChat() {
             }
           }
           
-          // Strategy 3: Look for proper nouns in the first paragraph if no match
+          // Strategy 3: Look for proper nouns if no match
           if (personaName === 'Character') {
             const firstParagraph = responseText.split('\n\n')[0];
             const properNouns = firstParagraph.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b/g);
             if (properNouns && properNouns.length > 0) {
-              // Filter out common words that aren't names
               const excludeWords = ['Scene', 'The', 'This', 'Historical', 'Emperor', 'King', 'Queen', 'Lord', 'Lady', 'Visual', 'Prompt'];
               const validNames = properNouns.filter(name => 
                 !excludeWords.includes(name) && 
@@ -76,35 +85,61 @@ export default function useChat() {
           }
         }
         
+        console.log('🎭 Extracted persona name:', personaName);
+        
+        // Parse scenes using API
         const result = await ChatAPI.parseScenes(responseText, personaName);
+        console.log('📝 API parse result:', result);
+        
         if (result.success && result.scenes.length > 0) {
-          setScenes({
-            scenes: result.scenes,
-            personaName: result.personaName,
-            responseText: responseText
-          });
-          // Clear previous generated videos when new scenes are detected
-          setGeneratedVideos(null);
+          console.log('✅ Scenes parsed successfully:', result.scenes.length, 'scenes');
+          setChatState(prev => ({
+            ...prev,
+            scenes: {
+              scenes: result.scenes,
+              personaName: result.personaName,
+              responseText: responseText
+            },
+            generatedVideos: null, // Clear previous results
+            error: null,
+            progress: null,
+            completedScenes: []
+          }));
           return true;
+        } else {
+          console.log('❌ No scenes found or parsing failed');
         }
+      } else {
+        console.log('❌ No scene markers found in response');
       }
       return false;
     } catch (error) {
       console.error('Scene parsing error:', error);
+      setChatState(prev => ({
+        ...prev,
+        error: error.message
+      }));
       return false;
     }
   }, []);
 
+  // Button-triggered visual generation
   const generateVisuals = useCallback(async () => {
-    if (!scenes) return;
+    if (!chatState.scenes) return;
 
-    setIsGeneratingVisuals(true);
-    setVisualError(null);
-    setVisualProgress(null);
-    setGeneratedVideos(null);
+    setChatState(prev => ({
+      ...prev,
+      isGenerating: true,
+      error: null,
+      progress: null,
+      completedScenes: []
+    }));
 
     try {
-      const response = await ChatAPI.generateVisualSequence(scenes.scenes, scenes.personaName);
+      const response = await ChatAPI.generateVisualSequence(
+        chatState.scenes.scenes, 
+        chatState.scenes.personaName
+      );
       
       // Stream the visual generation progress
       for await (const data of ChatAPI.streamVisualGeneration(response)) {
@@ -113,36 +148,52 @@ export default function useChat() {
         }
         
         if (data.type === 'status' || data.type === 'progress') {
-          setVisualProgress(data);
+          setChatState(prev => ({
+            ...prev,
+            progress: data
+          }));
         }
         
         if (data.type === 'scene_complete') {
-          setVisualProgress(prev => ({
+          setChatState(prev => ({
             ...prev,
-            completedScenes: [...(prev?.completedScenes || []), data.scene]
+            completedScenes: [...prev.completedScenes, data.scene],
+            progress: {
+              ...prev.progress,
+              currentScene: prev.completedScenes.length + 1
+            }
           }));
         }
         
         if (data.type === 'complete') {
           const completedPersona = {
-            personaName: scenes.personaName,
+            personaName: chatState.scenes.personaName,
             scenes: data.results,
             totalScenes: data.results.length,
             timestamp: new Date().toISOString()
           };
           
-          setGeneratedVideos(completedPersona);
+          setChatState(prev => ({
+            ...prev,
+            generatedVideos: completedPersona,
+            isGenerating: false,
+            progress: null
+          }));
+          
+          // Update legacy state for backward compatibility
           setAllGeneratedPersonas(prev => [...prev, completedPersona]);
-          setVisualProgress(null);
         }
       }
     } catch (error) {
-      setVisualError(error.message);
+      setChatState(prev => ({
+        ...prev,
+        error: error.message,
+        isGenerating: false,
+        progress: null
+      }));
       console.error('Visual generation error:', error);
-    } finally {
-      setIsGeneratingVisuals(false);
     }
-  }, [scenes]);
+  }, [chatState.scenes]);
 
   const sendMessage = useCallback(async (message) => {
     if (!message.trim()) return;
@@ -197,7 +248,7 @@ export default function useChat() {
               : msg
           ));
           
-          // Auto-parse scenes from the completed response
+          // Parse scenes from the completed response (but don't auto-generate)
           await parseScenes(finalText);
         }
       }
@@ -212,11 +263,15 @@ export default function useChat() {
   const clearChat = useCallback(() => {
     setMessages([]);
     setError(null);
-    setScenes(null);
-    setGeneratedVideos(null);
+    setChatState({
+      scenes: null,
+      isGenerating: false,
+      generatedVideos: null,
+      error: null,
+      progress: null,
+      completedScenes: []
+    });
     setAllGeneratedPersonas([]);
-    setVisualProgress(null);
-    setVisualError(null);
   }, []);
 
   return {
@@ -225,14 +280,16 @@ export default function useChat() {
     error,
     sendMessage,
     clearChat,
-    // Visual generation exports
-    scenes,
-    isGeneratingVisuals,
-    visualProgress,
-    generatedVideos,
-    allGeneratedPersonas,
-    visualError,
+    // Enhanced visual generation exports
+    chatState,
     generateVisuals,
-    parseScenes
+    parseScenes,
+    // Legacy exports for backward compatibility
+    scenes: chatState.scenes,
+    isGeneratingVisuals: chatState.isGenerating,
+    visualProgress: chatState.progress,
+    generatedVideos: chatState.generatedVideos,
+    allGeneratedPersonas,
+    visualError: chatState.error
   };
 }
