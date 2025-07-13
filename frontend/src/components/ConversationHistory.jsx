@@ -21,7 +21,18 @@ export default function ConversationHistory({
 
   const loadConversations = () => {
     const allConversations = storageManager.getConversations();
-    setConversations(allConversations);
+    
+    // Enhance conversations with persona counts
+    const conversationsWithPersonas = allConversations.map(conv => {
+      const personas = storageManager.getPersonasByConversation(conv.id);
+      return {
+        ...conv,
+        personaCount: personas.length,
+        hasVideos: personas.some(p => p.scenes?.some(s => s.status === 'complete'))
+      };
+    });
+    
+    setConversations(conversationsWithPersonas);
   };
 
   const filteredConversations = conversations.filter(conv =>
@@ -171,6 +182,11 @@ export default function ConversationHistory({
                       <h3 className="text-sm font-medium text-gray-900 truncate">
                         {conv.title}
                       </h3>
+                      {conv.hasVideos && (
+                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full" title="Has generated videos">
+                          🎬 {conv.personaCount}
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-500">
                       {formatDate(conv.lastModified)} • {conv.messages.length} messages

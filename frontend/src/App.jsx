@@ -175,6 +175,7 @@ export default function App() {
               <VideoPanel 
                 allGeneratedPersonas={chatState.allGeneratedPersonas}
                 currentGeneratedVideos={chatState.chatState?.generatedVideos || chatState.generatedVideos}
+                currentConversationId={chatState.currentConversationId}
                 isGenerating={chatState.chatState?.isGenerating || chatState.isGeneratingVisuals}
                 progress={chatState.chatState?.progress || chatState.visualProgress}
                 onDeletePersona={handleDeletePersona}

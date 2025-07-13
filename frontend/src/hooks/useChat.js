@@ -362,6 +362,7 @@ export default function useChat(onConversationsChange) {
         if (data.type === 'complete') {
           const completedPersona = {
             id: personaId,
+            conversationId: currentConversationId, // ADD: Include conversation context
             personaName: chatState.scenes.personaName,
             scenes: data.results.map(scene => ({
               ...scene,
