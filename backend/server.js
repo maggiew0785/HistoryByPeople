@@ -2,6 +2,7 @@ const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 
 dotenv.config();
 
@@ -25,6 +26,9 @@ const chatLimiter = rateLimit({
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
+
+// Serve video files from the parent HistoryByPeople folder
+app.use('/videos', express.static(path.join(__dirname, '../')));
 
 // Routes
 app.use('/grounding', require('./routes/grounding'));

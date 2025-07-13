@@ -1,32 +1,69 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 // Single Persona Video Display Component
 function PersonaVideoDisplay({ personaData }) {
+  // Safety check for personaData
+  if (!personaData || !personaData.scenes || personaData.scenes.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center text-gray-600">
+          <div className="text-4xl mb-4">🎬</div>
+          <h3 className="text-lg font-medium mb-2">No persona data available</h3>
+          <p className="text-sm">Unable to load persona information.</p>
+        </div>
+      </div>
+    );
+  }
+
   const [currentScene, setCurrentScene] = useState(0);
   const [videoErrors, setVideoErrors] = useState({}); // Track video errors by scene index
   const { personaName, scenes } = personaData;
-  const scene = scenes[currentScene];
+  
+  // Ensure currentScene is within bounds
+  const safeCurrentScene = Math.min(Math.max(0, currentScene), scenes.length - 1);
+  const scene = scenes[safeCurrentScene];
+
+  // Reset video error for current scene when scene changes
+  useEffect(() => {
+    if (videoErrors[safeCurrentScene]) {
+      setVideoErrors(prev => ({ ...prev, [safeCurrentScene]: false }));
+    }
+  }, [safeCurrentScene]);
 
   const handleVideoError = (sceneIndex) => {
     setVideoErrors(prev => ({ ...prev, [sceneIndex]: true }));
   };
 
-  const hasVideoError = videoErrors[currentScene];
+  const hasVideoError = videoErrors[safeCurrentScene];
+
+  // Safety check for scene
+  if (!scene) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center text-gray-600">
+          <div className="text-4xl mb-4">⚠️</div>
+          <h3 className="text-lg font-medium mb-2">Scene not found</h3>
+          <p className="text-sm">The requested scene could not be loaded.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto">
       {/* Scene Navigation */}
       <div className="p-4 border-b border-gray-200">
-        <div className="flex gap-2 mb-3">
+        <div className="flex gap-2 mb-3 flex-wrap">
           {scenes.map((_, index) => (
             <button
               key={index}
               onClick={() => setCurrentScene(index)}
               className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                currentScene === index
+                safeCurrentScene === index
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
+              aria-label={`Go to scene ${index + 1}`}
             >
               Scene {index + 1}
             </button>
@@ -36,21 +73,23 @@ function PersonaVideoDisplay({ personaData }) {
         {/* Scene Navigation Arrows */}
         <div className="flex justify-between items-center">
           <button
-            onClick={() => setCurrentScene(Math.max(0, currentScene - 1))}
-            disabled={currentScene === 0}
+            onClick={() => setCurrentScene(Math.max(0, safeCurrentScene - 1))}
+            disabled={safeCurrentScene === 0}
             className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200"
+            aria-label="Previous scene"
           >
             ← Previous
           </button>
           
           <span className="text-sm text-gray-600">
-            {currentScene + 1} of {scenes.length}
+            {safeCurrentScene + 1} of {scenes.length}
           </span>
           
           <button
-            onClick={() => setCurrentScene(Math.min(scenes.length - 1, currentScene + 1))}
-            disabled={currentScene === scenes.length - 1}
+            onClick={() => setCurrentScene(Math.min(scenes.length - 1, safeCurrentScene + 1))}
+            disabled={safeCurrentScene === scenes.length - 1}
             className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200"
+            aria-label="Next scene"
           >
             Next →
           </button>
@@ -61,7 +100,7 @@ function PersonaVideoDisplay({ personaData }) {
       <div className="p-4">
         {scene.status === 'complete' ? (
           <div>
-            <h3 className="text-lg font-medium mb-3">{scene.title}</h3>
+            <h3 className="text-lg font-medium mb-3">{scene.title || 'Untitled Scene'}</h3>
             
             {/* Video Player - only show if videoUrl exists and no error */}
             {scene.videoUrl && !hasVideoError && (
@@ -73,7 +112,8 @@ function PersonaVideoDisplay({ personaData }) {
                   loop
                   className="w-full rounded-lg shadow-lg"
                   style={{ maxHeight: '400px' }}
-                  onError={() => handleVideoError(currentScene)}
+                  onError={() => handleVideoError(safeCurrentScene)}
+                  aria-label={`Video for ${scene.title || 'scene'}`}
                 >
                   Your browser does not support the video tag.
                 </video>
@@ -85,7 +125,7 @@ function PersonaVideoDisplay({ personaData }) {
               <div className="mb-4">
                 <img
                   src={scene.imageUrl}
-                  alt={scene.title}
+                  alt={scene.title || 'Scene image'}
                   className="w-full rounded-lg shadow-lg"
                   style={{ maxHeight: '400px', objectFit: 'contain' }}
                 />
@@ -104,10 +144,12 @@ function PersonaVideoDisplay({ personaData }) {
             )}
             
             {/* Scene Context */}
-            <div className="bg-gray-50 p-3 rounded-lg">
-              <h4 className="font-medium text-gray-900 mb-1">Scene Context</h4>
-              <p className="text-sm text-gray-700">{scene.context}</p>
-            </div>
+            {scene.context && (
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <h4 className="font-medium text-gray-900 mb-1">Scene Context</h4>
+                <p className="text-sm text-gray-700">{scene.context}</p>
+              </div>
+            )}
             
             {/* Technical Details (Collapsible) */}
             <details className="mt-3">
@@ -115,7 +157,9 @@ function PersonaVideoDisplay({ personaData }) {
                 View generation details
               </summary>
               <div className="mt-2 p-3 bg-gray-50 rounded text-xs text-gray-600">
-                <p><strong>Visual Prompt:</strong> {scene.visualPrompt}</p>
+                {scene.visualPrompt && (
+                  <p><strong>Visual Prompt:</strong> {scene.visualPrompt}</p>
+                )}
                 {scene.imageUrl && (
                   <p className="mt-1 break-all"><strong>Image URL:</strong> {scene.imageUrl}</p>
                 )}
@@ -131,13 +175,13 @@ function PersonaVideoDisplay({ personaData }) {
         ) : scene.status === 'failed' ? (
           <div className="text-center py-8">
             <div className="text-red-500 text-4xl mb-4">❌</div>
-            <h3 className="text-lg font-medium text-red-700 mb-2">{scene.title}</h3>
-            <p className="text-red-600">Generation failed: {scene.error}</p>
+            <h3 className="text-lg font-medium text-red-700 mb-2">{scene.title || 'Scene Generation Failed'}</h3>
+            <p className="text-red-600">Generation failed: {scene.error || 'Unknown error'}</p>
           </div>
         ) : (
           <div className="text-center py-8">
             <div className="text-gray-400 text-4xl mb-4">⏳</div>
-            <h3 className="text-lg font-medium text-gray-700 mb-2">{scene.title}</h3>
+            <h3 className="text-lg font-medium text-gray-700 mb-2">{scene.title || 'Generating Scene'}</h3>
             <p className="text-gray-600">Generating...</p>
           </div>
         )}
@@ -150,18 +194,23 @@ function PersonaVideoDisplay({ personaData }) {
 export default function VideoPanel({ allGeneratedPersonas, currentGeneratedVideos }) {
   const [activeTab, setActiveTab] = useState(0);
 
-  // Combine current generation with all personas
+  // Combine current generation with all personas, avoiding duplicates
   const allPersonas = [...(allGeneratedPersonas || [])];
-  if (currentGeneratedVideos && !allPersonas.find(p => p.personaName === currentGeneratedVideos.personaName)) {
+  
+  // Add current generation if it exists and isn't already in the list
+  if (currentGeneratedVideos && 
+      currentGeneratedVideos.personaName && 
+      !allPersonas.find(p => p.personaName === currentGeneratedVideos.personaName && 
+                              JSON.stringify(p.scenes) === JSON.stringify(currentGeneratedVideos.scenes))) {
     allPersonas.push(currentGeneratedVideos);
   }
 
-  // Set active tab to most recent if not set
-  React.useEffect(() => {
+  // Set active tab to most recent if current tab is out of bounds
+  useEffect(() => {
     if (allPersonas.length > 0 && activeTab >= allPersonas.length) {
       setActiveTab(allPersonas.length - 1);
     }
-  }, [allPersonas.length, activeTab]);
+  }, [allPersonas, activeTab]);
 
   if (allPersonas.length === 0) {
     return (
@@ -182,7 +231,9 @@ export default function VideoPanel({ allGeneratedPersonas, currentGeneratedVideo
     );
   }
 
-  const activePersona = allPersonas[activeTab];
+  // Ensure activeTab is within bounds
+  const safeActiveTab = Math.min(Math.max(0, activeTab), allPersonas.length - 1);
+  const activePersona = allPersonas[safeActiveTab];
 
   return (
     <div className="h-full bg-white flex flex-col overflow-hidden">
@@ -193,20 +244,21 @@ export default function VideoPanel({ allGeneratedPersonas, currentGeneratedVideo
         </div>
         
         {/* Persona Tabs */}
-        <div className="flex border-b border-gray-200">
+        <div className="flex border-b border-gray-200 overflow-x-auto">
           {allPersonas.map((persona, index) => (
             <button
-              key={persona.personaName + index}
+              key={`${persona.personaName}-${index}`}
               onClick={() => setActiveTab(index)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === index
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                safeActiveTab === index
                   ? 'border-blue-600 text-blue-600 bg-blue-50'
                   : 'border-transparent text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
+              aria-label={`View ${persona.personaName} stories`}
             >
-              {persona.personaName}
+              {persona.personaName || 'Unnamed Persona'}
               <span className="ml-1 text-xs text-gray-500">
-                ({persona.scenes.length} scenes)
+                ({(persona.scenes || []).length} scenes)
               </span>
             </button>
           ))}
@@ -215,7 +267,17 @@ export default function VideoPanel({ allGeneratedPersonas, currentGeneratedVideo
       
       {/* Active Persona Content */}
       <div className="flex-1 min-h-0">
-        <PersonaVideoDisplay personaData={activePersona} />
+        {activePersona ? (
+          <PersonaVideoDisplay personaData={activePersona} />
+        ) : (
+          <div className="h-full flex items-center justify-center">
+            <div className="text-center text-gray-600">
+              <div className="text-4xl mb-4">⚠️</div>
+              <h3 className="text-lg font-medium mb-2">No persona selected</h3>
+              <p className="text-sm">Unable to load persona data.</p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

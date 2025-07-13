@@ -126,11 +126,30 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div className="h-screen flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between p-4 bg-blue-500 text-white flex-shrink-0">
-          <h1 className="text-2xl font-bold">Walk a mile...</h1>
+        <div 
+          className="flex items-center justify-center p-4 text-white flex-shrink-0 relative"
+          style={{
+            backgroundImage: 'url(/bookshelf-header.png)',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            fontFamily: '"Times New Roman", Times, serif'
+          }}
+        >
+          {/* Dark overlay for text readability */}
+          <div className="absolute inset-0 bg-black/60"></div>
+          
+          {/* Content */}
+          <div className="relative z-10 bg-black/80 px-6 py-3 rounded">
+            <h1 className="text-3xl font-bold text-white text-center" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+              Walk a mile in their shoes. History by people.
+            </h1>
+          </div>
+          
+          {/* Settings button positioned absolutely in top right */}
           <button
             onClick={() => setShowSettingsModal(true)}
-            className="p-2 hover:bg-blue-600 rounded-lg transition-colors"
+            className="absolute top-4 right-4 z-10 p-2 hover:bg-black/20 rounded-lg transition-colors"
             title="Settings"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
