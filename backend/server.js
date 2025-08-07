@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 4000;
 // Middleware
 app.use(express.json());
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'],
+  origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176'],
   credentials: true
 }));
 
@@ -35,6 +35,7 @@ app.use('/grounding', require('./routes/grounding'));
 app.use('/prompts', require('./routes/prompts'));
 app.use('/api/chat', chatLimiter, require('./routes/chat'));
 app.use('/api/visual', require('./routes/visual'));
+app.use('/api/tts', require('./routes/tts'));
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

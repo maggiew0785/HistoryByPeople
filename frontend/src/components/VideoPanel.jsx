@@ -18,6 +18,9 @@ function PersonaVideoDisplay({ personaData }) {
   const [currentScene, setCurrentScene] = useState(0);
   const [videoErrors, setVideoErrors] = useState({}); // Track video errors by scene index
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [currentAudio, setCurrentAudio] = useState(null);
+  const [audioCache, setAudioCache] = useState(new Map()); // In-memory cache
   const { personaName, scenes } = personaData;
   
   // Ensure currentScene is within bounds
@@ -31,53 +34,205 @@ function PersonaVideoDisplay({ personaData }) {
     }
     // Stop any ongoing speech when scene changes
     if (isSpeaking) {
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        setCurrentAudio(null);
+      }
       speechSynthesis.cancel();
       setIsSpeaking(false);
     }
   }, [safeCurrentScene]);
 
-  // Text-to-speech functions
-  const speakText = (text) => {
-    // Check if speech synthesis is supported
-    if (!('speechSynthesis' in window)) {
-      alert('Text-to-speech is not supported in your browser.');
-      return;
+  // Audio caching utilities
+  const generateCacheKey = (text, personaName) => {
+    // Create a hash-like key from text and persona name
+    const combined = `${text}-${personaName}`;
+    
+    // Use a simple hash function that works with Unicode characters
+    let hash = 0;
+    for (let i = 0; i < combined.length; i++) {
+      const char = combined.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    
+    // Convert to positive hex string
+    const hashStr = Math.abs(hash).toString(16);
+    
+    // Pad with zeros and limit to 32 characters
+    return hashStr.padStart(8, '0').substring(0, 32);
+  };
+
+  const getCachedAudio = async (cacheKey) => {
+    // Check in-memory cache first
+    if (audioCache.has(cacheKey)) {
+      console.log('Found audio in memory cache');
+      return audioCache.get(cacheKey);
     }
 
-    // Stop any ongoing speech
-    speechSynthesis.cancel();
+    // Check localStorage cache
+    try {
+      const cachedData = localStorage.getItem(`tts_cache_${cacheKey}`);
+      if (cachedData) {
+        console.log('Found audio in localStorage cache');
+        const audioBlob = new Blob([new Uint8Array(JSON.parse(cachedData))], { type: 'audio/wav' });
+        // Store in memory cache for faster access
+        audioCache.set(cacheKey, audioBlob);
+        return audioBlob;
+      }
+    } catch (error) {
+      console.error('Error reading from cache:', error);
+    }
 
-    // Create new utterance
-    const utterance = new SpeechSynthesisUtterance(text);
-    
-    // Configure speech parameters
-    utterance.rate = 1.5; // Faster reading speed
-    utterance.pitch = 0.8;
-    utterance.volume = 1.2;
-    
-    // Set up event listeners
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => {
+    return null;
+  };
+
+  const setCachedAudio = async (cacheKey, audioBlob) => {
+    // Store in memory cache
+    audioCache.set(cacheKey, audioBlob);
+
+    // Store in localStorage cache
+    try {
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      localStorage.setItem(`tts_cache_${cacheKey}`, JSON.stringify(Array.from(uint8Array)));
+      console.log('Audio cached successfully');
+    } catch (error) {
+      console.error('Error storing in cache:', error);
+    }
+  };
+
+  // Cleanup old cache entries (keep only last 50 entries)
+  const cleanupCache = () => {
+    try {
+      const cacheKeys = Object.keys(localStorage).filter(key => key.startsWith('tts_cache_'));
+      if (cacheKeys.length > 50) {
+        // Remove oldest entries
+        cacheKeys.slice(0, cacheKeys.length - 50).forEach(key => {
+          localStorage.removeItem(key);
+        });
+      }
+    } catch (error) {
+      console.error('Error cleaning up cache:', error);
+    }
+  };
+
+  // OpenAI TTS functions with caching
+  const speakTextWithOpenAI = async (text) => {
+    try {
+      console.log('Starting TTS generation for:', personaName);
+      setIsGeneratingAudio(true);
+      
+      // Stop any currently playing audio
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        setCurrentAudio(null);
+      }
+
+      // Generate cache key
+      const cacheKey = generateCacheKey(text, personaName);
+      console.log('Cache key:', cacheKey);
+
+      // Check if audio is already cached
+      let audioBlob = await getCachedAudio(cacheKey);
+
+      if (!audioBlob) {
+        console.log('Audio not cached, generating new audio...');
+        
+        const response = await fetch('/api/tts', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            text: text,
+            personaName: personaName 
+          }),
+        });
+
+        console.log('TTS Response status:', response.status);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('TTS Response error:', errorText);
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+
+        audioBlob = await response.blob();
+        console.log('Audio blob size:', audioBlob.size, 'bytes');
+        
+        if (audioBlob.size === 0) {
+          throw new Error('Received empty audio file');
+        }
+
+        // Cache the audio for future use
+        await setCachedAudio(cacheKey, audioBlob);
+        cleanupCache();
+      } else {
+        console.log('Using cached audio, size:', audioBlob.size, 'bytes');
+      }
+      
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      
+      setCurrentAudio(audio);
+      setIsSpeaking(true);
+      setIsGeneratingAudio(false);
+
+      // Set up event listeners
+      audio.onended = () => {
+        console.log('Audio playback ended');
+        setIsSpeaking(false);
+        URL.revokeObjectURL(audioUrl);
+        setCurrentAudio(null);
+      };
+
+      audio.onerror = (error) => {
+        console.error('Audio playback error:', error);
+        setIsSpeaking(false);
+        setIsGeneratingAudio(false);
+        URL.revokeObjectURL(audioUrl);
+        setCurrentAudio(null);
+      };
+
+      console.log('Starting audio playback...');
+      // Play the audio
+      await audio.play();
+      console.log('Audio playback started successfully');
+
+    } catch (error) {
+      console.error('TTS Error details:', error);
+      setIsGeneratingAudio(false);
       setIsSpeaking(false);
-      console.error('Speech synthesis error');
-    };
-
-    // Speak the text
-    speechSynthesis.speak(utterance);
+      alert(`Failed to generate speech: ${error.message}`);
+    }
   };
 
   const stopSpeaking = () => {
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+      setCurrentAudio(null);
+    }
+    // Fallback for browser speech synthesis
     speechSynthesis.cancel();
     setIsSpeaking(false);
   };
 
-  const toggleSpeech = (text) => {
-    if (isSpeaking) {
+  const toggleSpeech = async (text) => {
+    if (isSpeaking || isGeneratingAudio) {
       stopSpeaking();
     } else {
-      speakText(text);
+      speakTextWithOpenAI(text);
     }
+  };
+
+  // Check if audio is cached for this text
+  const isAudioCached = (text) => {
+    const cacheKey = generateCacheKey(text, personaName);
+    return audioCache.has(cacheKey) || localStorage.getItem(`tts_cache_${cacheKey}`) !== null;
   };
 
   const handleVideoError = (sceneIndex) => {
@@ -200,30 +355,63 @@ function PersonaVideoDisplay({ personaData }) {
                   <h4 className="font-medium text-gray-900">Scene Context</h4>
                   <button
                     onClick={() => toggleSpeech(scene.context)}
+                    disabled={isGeneratingAudio}
                     className={`p-1 rounded-full transition-colors ${
                       isSpeaking 
                         ? 'bg-red-100 text-red-600 hover:bg-red-200' 
+                        : isGeneratingAudio
+                        ? 'bg-yellow-100 text-yellow-600'
+                        : isAudioCached(scene.context)
+                        ? 'bg-green-100 text-green-600 hover:bg-green-200'
                         : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
                     }`}
-                    title={isSpeaking ? 'Stop reading' : 'Read context aloud'}
-                    aria-label={isSpeaking ? 'Stop reading context' : 'Read context aloud'}
+                    title={
+                      isGeneratingAudio 
+                        ? 'Generating audio...' 
+                        : isSpeaking 
+                        ? 'Stop reading' 
+                        : isAudioCached(scene.context)
+                        ? 'Play cached audio'
+                        : 'Generate and play audio'
+                    }
+                    aria-label={
+                      isGeneratingAudio 
+                        ? 'Generating audio' 
+                        : isSpeaking 
+                        ? 'Stop reading context' 
+                        : isAudioCached(scene.context)
+                        ? 'Play cached audio'
+                        : 'Generate and play audio'
+                    }
                   >
-                    {isSpeaking ? (
+                    {isGeneratingAudio ? (
+                      <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    ) : isSpeaking ? (
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M9 12h.01M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
+                      <div className="relative">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M9 12h.01M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        {isAudioCached(scene.context) && (
+                          <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full"></div>
+                        )}
+                      </div>
                     )}
                   </button>
                 </div>
                 <p className="text-sm text-gray-700">{scene.context}</p>
-                {isSpeaking && (
+                {(isSpeaking || isGeneratingAudio) && (
                   <div className="mt-2 flex items-center text-xs text-blue-600">
                     <div className="animate-pulse w-2 h-2 bg-blue-600 rounded-full mr-1"></div>
-                    Reading aloud...
+                    {isGeneratingAudio ? 'Generating audio...' : 'Playing audio...'}
+                    {isAudioCached(scene.context) && !isGeneratingAudio && (
+                      <span className="ml-1 text-green-600">(cached)</span>
+                    )}
                   </div>
                 )}
               </div>
