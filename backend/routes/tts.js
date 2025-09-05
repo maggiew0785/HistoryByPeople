@@ -23,6 +23,7 @@ router.post('/', async (req, res) => {
       input: text,
       instructions: instructions,
       response_format: "wav",
+      speed: 1.25, // 25% faster than normal
     });
 
     // Convert the response to a buffer and send it
